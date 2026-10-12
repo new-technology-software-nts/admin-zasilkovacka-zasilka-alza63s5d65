@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTS - Admin Panel</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col items-center justify-start p-4">
+
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 my-4 border border-gray-100">
+        <header class="text-center mb-6">
+            <h1 class="text-lg font-bold text-gray-900">NTS - Administrace AlzaBoxu</h1>
+            <p class="text-xs text-gray-500 mt-1">Správa stavů a výdejních kódů</p>
+        </header>
+
+        <hr class="border-gray-200 mb-6">
+
+        <!-- Ovládací tlačítka -->
+        <div class="space-y-4">
+            <button id="open-status-modal" class="w-full bg-emerald-600 text-white font-medium py-3 rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+                <span>➕ Přidat stavy</span>
+            </button>
+            <button id="open-code-modal" class="w-full bg-blue-600 text-white font-medium py-3 rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+                <span>🔑 Zadat výdejní kód</span>
+            </button>
+        </div>
+
+        <!-- Zobrazení aktuálního kódu -->
+        <div class="mt-8 p-4 bg-gray-50 rounded-xl border border-gray-100 text-center">
+            <p class="text-xs text-gray-500 mb-1">Zadaný kód:</p>
+            <p id="current-code-display" class="text-xl font-black text-gray-800 tracking-wider">Načítání...</p>
+        </div>
+    </div>
+
+    <!-- Modální okno: Přidat stav -->
+    <div id="modal-status" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Přidat nový stav</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Název:</label>
+                    <input type="text" id="status-name" placeholder="Např. Objednávka přijata" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Datum a čas:</label>
+                    <input type="datetime-local" id="status-time" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="status-pickup" class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                    <label for="status-pickup" class="text-sm font-medium text-gray-700">Výdejka (bod pro spuštění výdeje)</label>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button id="close-status-modal" class="flex-1 bg-white border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition">Zrušit</button>
+                <button id="save-status" class="flex-1 bg-emerald-600 text-white font-medium py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20">Uložit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modální okno: Zadat kód -->
+    <div id="modal-code" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Zadejte kód pro vyzvednutí:</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Kód:</label>
+                    <input type="text" id="code-input" placeholder="Např. 482910" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button id="close-code-modal" class="flex-1 bg-white border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition">Zrušit</button>
+                <button id="save-code" class="flex-1 bg-blue-600 text-white font-medium py-2.5 rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-600/20">Uložit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAqedLw64JygCAM5f6BTjoYJkC8lgLOE6E",
+            authDomain: "alza-zasilka.firebaseapp.com",
+            databaseURL: "https://alza-zasilka-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "alza-zasilka",
+            storageBucket: "alza-zasilka.firebasestorage.app",
+            messagingSenderId: "757955377440",
+            appId: "1:757955377440:web:2ac414a8425c8369c03f45"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Zobrazení aktuálního kódu z databáze
+        const currentCodeDisplay = document.getElementById('current-code-display');
+        onValue(ref(db, 'pickupCode'), (snapshot) => {
+            const code = snapshot.val();
+            if (code) {
+                const formatted = code.length === 6 ? code.match(/.{1,3}/g).join(' ') : code;
+                currentCodeDisplay.innerText = formatted;
+            } else {
+                currentCodeDisplay.innerText = "Zatím nezadán";
+            }
+        });
+
+        // Ovládání modálních oken pro stavy
+        const modalStatus = document.getElementById('modal-status');
+        document.getElementById('open-status-modal').onclick = () => {
+            modalStatus.classList.remove('hidden');
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('status-time').value = now.toISOString().slice(0, 16);
+        };
+        document.getElementById('close-status-modal').onclick = () => {
+            modalStatus.classList.add('hidden');
+        };
+
+        document.getElementById('save-status').onclick = () => {
+            const name = document.getElementById('status-name').value.trim();
+            const timeVal = document.getElementById('status-time').value;
+            const isPickupPoint = document.getElementById('status-pickup').checked;
+
+            if (!name || !timeVal) {
+                alert('Vyplňte prosím název i datum a čas.');
+                return;
+            }
+
+            const isoTime = new Date(timeVal).toISOString();
+
+            push(ref(db, 'statuses'), {
+                name: name,
+                time: isoTime,
+                isPickupPoint: isPickupPoint
+            }).then(() => {
+                modalStatus.classList.add('hidden');
+                document.getElementById('status-name').value = '';
+                document.getElementById('status-pickup').checked = false;
+                alert('Stav byl úspěšně uložen!');
+            }).catch((error) => {
+                alert('Chyba při ukládání: ' + error.message);
+            });
+        };
+
+        // Ovládání modálních oken pro kód
+        const modalCode = document.getElementById('modal-code');
+        document.getElementById('open-code-modal').onclick = () => {
+            modalCode.classList.remove('hidden');
+        };
+        document.getElementById('close-code-modal').onclick = () => {
+            modalCode.classList.add('hidden');
+        };
+
+        document.getElementById('save-code').onclick = () => {
+            const code = document.getElementById('code-input').value.trim();
+            if (!code) {
+                alert('Zadejte prosím kód.');
+                return;
+            }
+
+            set(ref(db, 'pickupCode'), code).then(() => {
+                modalCode.classList.add('hidden');
+                document.getElementById('code-input').value = '';
+                alert('Výdejní kód byl úspěšně uložen (nahrazen)!');
+            }).catch((error) => {
+                alert('Chyba při ukládání kódu: ' + error.message);
+            });
+        };
+    </script>
+</body>
+</html>
